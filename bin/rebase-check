@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Skip in CI
+if [[ -n "${CI:-}" ]]; then
+  echo "Rebase-check: skipping in CI (local merge-only hook)."
+  exit 0
+fi
+
+TARGET_BRANCH="${REBASE_TARGET_BRANCH:-develop}"
+
+MERGE_HEAD_PATH="$(git rev-parse --git-path MERGE_HEAD)"
+if [[ ! -f "$MERGE_HEAD_PATH" ]]; then
+  exit 0
+fi
+
+CURRENT_BRANCH="$(git symbolic-ref --short HEAD)"
+
+if [[ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]]; then
+  echo "Skipping rebase check: target is '$CURRENT_BRANCH' (only enforced for '$TARGET_BRANCH')."
+  exit 0
+fi
+
+SRC_COMMIT="$(cat "$MERGE_HEAD_PATH")"
+SRC_BRANCH="$(git for-each-ref --format='%(refname:short)' --contains "$SRC_COMMIT" refs/heads refs/remotes | head -n 1 || true)"
+
+git fetch -q origin "$CURRENT_BRANCH" || true
+
+if git rev-parse -q --verify "origin/$CURRENT_BRANCH" >/dev/null; then
+  TARGET_REF="$(git rev-parse "origin/$CURRENT_BRANCH")"
+else
+  TARGET_REF="$(git rev-parse "$CURRENT_BRANCH")"
+fi
+
+MERGE_BASE="$(git merge-base "$SRC_COMMIT" "$TARGET_REF")"
+
+if [[ "$MERGE_BASE" != "$TARGET_REF" ]]; then
+  echo "Refusing merge: branch being merged is NOT rebased on latest '$CURRENT_BRANCH'."
+  echo
+  echo "   Target tip: $TARGET_REF"
+  echo "   Merge-base: $MERGE_BASE"
+  echo
+  echo "Rebase your branch '$SRC_BRANCH' onto '$CURRENT_BRANCH' before merging."
+  exit 1
+fi
+
+echo "Branch is rebased on latest '$CURRENT_BRANCH'."
+exit 0
