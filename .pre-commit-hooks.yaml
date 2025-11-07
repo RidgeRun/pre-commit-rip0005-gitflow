@@ -2,7 +2,6 @@
   name: Ensure branch is rebased on develop
   entry: bin/rebase-check
   language: script
-  stages: [pre-merge-commit]
   description: |
     Blocks local merges if the branch being merged is not rebased on 'develop'.
     Automatically skipped in CI.
