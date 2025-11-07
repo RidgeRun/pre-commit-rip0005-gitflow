@@ -1,27 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+log(){ printf "%s\n" "$*" >&2; }
+
 # Skip in CI
 if [[ -n "${CI:-}" ]]; then
-  echo "Rebase-check: skipping in CI (local merge-only hook)."
+  log "Rebase-check: skipping in CI (local merge-only hook)."
   exit 0
 fi
 
-TARGET_BRANCH="${REBASE_TARGET_BRANCH:-develop}"
+TARGET_BRANCH="develop"
 
-MERGE_HEAD_PATH="$(git rev-parse --git-path MERGE_HEAD)"
+MERGE_HEAD_PATH="$(git rev-parse --git-path MERGE_HEAD)" 
 if [[ ! -f "$MERGE_HEAD_PATH" ]]; then
-  exit 0
+  log "Rebase-check: no MERGE_HEAD, not in merge stage. Skipping."
+  exit 0 
 fi
 
 CURRENT_BRANCH="$(git symbolic-ref --short HEAD)"
 
 if [[ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]]; then
-  echo "Skipping rebase check: target is '$CURRENT_BRANCH' (only enforced for '$TARGET_BRANCH')."
+  log "Skipping rebase check: target is '$CURRENT_BRANCH' (only enforced for '$TARGET_BRANCH')."
   exit 0
 fi
 
 SRC_COMMIT="$(cat "$MERGE_HEAD_PATH")"
+
 SRC_BRANCH="$(git for-each-ref --format='%(refname:short)' --contains "$SRC_COMMIT" refs/heads refs/remotes | head -n 1 || true)"
 
 git fetch -q origin "$CURRENT_BRANCH" || true
@@ -40,9 +44,9 @@ if [[ "$MERGE_BASE" != "$TARGET_REF" ]]; then
   echo "   Target tip: $TARGET_REF"
   echo "   Merge-base: $MERGE_BASE"
   echo
-  echo "Rebase your branch '$SRC_BRANCH' onto '$CURRENT_BRANCH' before merging."
+  echo "Rebase your branch '$SRC_BRANCH' onto 'origin/$CURRENT_BRANCH' before merging."
   exit 1
 fi
 
-echo "Branch is rebased on latest '$CURRENT_BRANCH'."
+log "Branch is rebased on latest 'origin/$CURRENT_BRANCH'."
 exit 0
