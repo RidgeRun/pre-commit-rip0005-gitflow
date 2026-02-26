@@ -1,6 +1,6 @@
 - id: rebase-check
   name: Rebase Check
-  entry: bin/rebase-check
+  entry: bin/rebase-check.sh
   language: script
   pass_filenames: false
   always_run: true
@@ -11,7 +11,7 @@
 
 - id: rebase-merge-check
   name: Rebase Merge Check
-  entry: bin/rebase-merge-check
+  entry: bin/rebase-merge-check.sh
   language: script
   pass_filenames: false
   always_run: true
