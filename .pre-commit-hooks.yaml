@@ -1,0 +1,21 @@
+- id: rebase-check
+  name: Rebase Check
+  entry: bin/rebase-check.sh
+  language: script
+  pass_filenames: false
+  always_run: true
+  stages: [pre-push]
+  description: |
+      Checks if the current branch is fully rebased against the shared branches.
+      The main branches default to `main`, `master` and `develop`.
+
+- id: rebase-merge-check
+  name: Rebase Merge Check
+  entry: bin/rebase-merge-check.sh
+  language: script
+  pass_filenames: false
+  always_run: true
+  stages: [pre-merge-commit]
+  description: |
+      Checks if, during a merge, the target branch is fully rebased against the
+      destination. This avoids overlapping merges.
