@@ -102,7 +102,7 @@ main() {
     fi
   done
 
-  log "Rebase-check passed: '$target_ref' includes all existing configured parent tips on '$remote_name'."
+  log "Rebase-check passed: '$target_ref' is up to date in '$remote_name'."
   return 0
 }
 
