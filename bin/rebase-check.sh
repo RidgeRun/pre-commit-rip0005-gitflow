@@ -42,6 +42,7 @@ check_rebased_on_parent() {
   local parent_sha
 
   if ! parent_exists_in_remote "$remote_name" "$parent_branch"; then
+    log "Rebase-check: parent '$parent_ref' does not exist. Skipping."
     return 0
   fi
 
