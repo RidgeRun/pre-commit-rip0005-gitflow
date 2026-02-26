@@ -33,13 +33,42 @@ parent_exists_in_remote() {
   git ls-remote --exit-code --heads "$remote_name" "$parent_branch" >/dev/null 2>&1
 }
 
-check_rebased_on_parent() {
+parent_exists_locally() {
+  local parent_branch="$1"
+  git rev-parse -q --verify "refs/heads/$parent_branch" >/dev/null
+}
+
+check_target_includes_parent() {
+  local parent_ref="$1"
+  local parent_label="$2"
+  local target_ref="$3"
+  local target_sha="$4"
+  local parent_sha
+
+  parent_sha="$(git rev-parse "$parent_ref")"
+
+  if ! git merge-base --is-ancestor "$parent_sha" "$target_sha"; then
+    log "Rebase-check failed: '$target_ref' is behind '$parent_label'."
+    log "Rebase onto '$parent_label' before continuing."
+    log "Parent tip: $parent_sha"
+    log "Target head: $target_sha"
+    return 1
+  fi
+
+  return 0
+}
+
+check_remote_parent() {
   local remote_name="$1"
   local parent_branch="$2"
   local target_ref="$3"
   local target_sha="$4"
   local parent_ref="${remote_name}/${parent_branch}"
-  local parent_sha
+
+  if ! remote_exists "$remote_name"; then
+    log "Rebase-check: remote '$remote_name' not found."
+    return 1
+  fi
 
   if ! parent_exists_in_remote "$remote_name" "$parent_branch"; then
     log "Rebase-check: parent '$parent_ref' does not exist. Skipping."
@@ -51,13 +80,41 @@ check_rebased_on_parent() {
     return 1
   fi
 
-  parent_sha="$(git rev-parse "refs/remotes/$parent_ref")"
+  if ! check_target_includes_parent "refs/remotes/$parent_ref" "$parent_ref" "$target_ref" "$target_sha"; then
+    return 1
+  fi
 
-  if ! git merge-base --is-ancestor "$parent_sha" "$target_sha"; then
-    log "Rebase-check failed: '$target_ref' is behind '$parent_ref'."
-    log "Rebase onto '$parent_ref' before continuing."
-    log "Parent tip: $parent_sha"
-    log "Target head: $target_sha"
+  return 0
+}
+
+check_local_parent() {
+  local parent_branch="$1"
+  local target_ref="$2"
+  local target_sha="$3"
+
+  if ! parent_exists_locally "$parent_branch"; then
+    log "Rebase-check: parent '$parent_branch' does not exist locally. Skipping."
+    return 0
+  fi
+
+  if ! check_target_includes_parent "refs/heads/$parent_branch" "$parent_branch" "$target_ref" "$target_sha"; then
+    return 1
+  fi
+
+  return 0
+}
+
+check_rebased_on_parent() {
+  local remote_name="$1"
+  local parent_branch="$2"
+  local target_ref="$3"
+  local target_sha="$4"
+
+  if ! check_remote_parent "$remote_name" "$parent_branch" "$target_ref" "$target_sha"; then
+    return 1
+  fi
+
+  if ! check_local_parent "$parent_branch" "$target_ref" "$target_sha"; then
     return 1
   fi
 
@@ -72,22 +129,18 @@ main() {
   local normalized_parent_spec
   local parent_branch
 
+  if is_detached_head; then
+    log "Rebase-check: detached HEAD. Skipping."
+    return 0
+  fi
+
   if [[ -z "$target_ref" ]]; then
-    if is_detached_head; then
-      log "Rebase-check: detached HEAD. Skipping."
-      return 0
-    fi
     target_ref="$(get_current_branch)"
   fi
 
   if ! target_sha="$(git rev-parse --verify "${target_ref}^{commit}" 2>/dev/null)"; then
     log "Rebase-check: target '$target_ref' is not a valid commit-ish."
     return 1
-  fi
-
-  if ! remote_exists "$remote_name"; then
-    log "Rebase-check: remote '$remote_name' not found. Skipping."
-    return 0
   fi
 
   normalized_parent_spec="${parent_spec//,/ }"
@@ -103,7 +156,7 @@ main() {
     fi
   done
 
-  log "Rebase-check passed: '$target_ref' is up to date in '$remote_name'."
+  log "Rebase-check passed: '$target_ref' is up to date."
   return 0
 }
 
