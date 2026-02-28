@@ -14,11 +14,6 @@ set -euo pipefail
 
 log(){ printf "%s\n" "$*" >&2; }
 
-is_zero_sha() {
-  local sha="$1"
-  [[ "$sha" =~ ^0+$ ]]
-}
-
 is_protected_branch() {
   local branch_name="$1"
   local protected_spec="$2"
@@ -64,35 +59,28 @@ check_no_ff_update() {
 }
 
 main() {
-  local _remote_name="${1:-origin}"
-  local _remote_url="${2:-}"
   local protected_spec="${3:-main master develop}"
-  local local_ref
-  local local_sha
-  local remote_ref
-  local remote_sha
+  local from_ref="${PRE_COMMIT_FROM_REF:-}"
+  local to_ref="${PRE_COMMIT_TO_REF:-}"
+  local remote_branch_ref="${PRE_COMMIT_REMOTE_BRANCH:-}"
   local branch_name
 
-  while read -r local_ref local_sha remote_ref remote_sha; do
-    [[ -z "${local_ref:-}" ]] && continue
+  if [[ -z "$from_ref" || -z "$to_ref" ]]; then
+    return 0
+  fi
 
-    if [[ "$remote_ref" != refs/heads/* ]]; then
-      continue
-    fi
+  if [[ "$remote_branch_ref" != refs/heads/* ]]; then
+    return 0
+  fi
 
-    branch_name="${remote_ref#refs/heads/}"
-    if ! is_protected_branch "$branch_name" "$protected_spec"; then
-      continue
-    fi
+  branch_name="${remote_branch_ref#refs/heads/}"
+  if ! is_protected_branch "$branch_name" "$protected_spec"; then
+    return 0
+  fi
 
-    if is_zero_sha "$local_sha" || is_zero_sha "$remote_sha"; then
-      continue
-    fi
-
-    if ! check_no_ff_update "$branch_name" "$remote_sha" "$local_sha"; then
-      return 1
-    fi
-  done
+  if ! check_no_ff_update "$branch_name" "$from_ref" "$to_ref"; then
+    return 1
+  fi
 
   return 0
 }
