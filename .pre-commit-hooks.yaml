@@ -9,6 +9,17 @@
       Checks if the current branch is fully rebased against the shared branches.
       The main branches default to `main`, `master` and `develop`.
 
+- id: rip0005-no-ff-merge-check
+  name: RIP 5 - No-FF Merge Check
+  entry: bin/rip0005-no-ff-merge-check.sh
+  language: script
+  pass_filenames: false
+  always_run: true
+  stages: [pre-push]
+  description: |
+      Blocks fast-forward/direct updates on protected branches
+      (`main`, `master`, `develop`).
+
 - id: rip0005-rebase-merge-check
   name: RIP 5 - Rebase Merge Check
   entry: bin/rebase-merge-check.sh
