@@ -29,16 +29,10 @@ If you only want one hook, include only that `id`.
 ## 3) Install hook types
 
 ```bash
-pre-commit install --hook-type pre-push --hook-type pre-merge-commit
+pre-commit install --hook-type pre-push --hook-type pre-merge-commit --hook-type commit-msg
 ```
 
-## 4) Install commit guard hook type
-
-```bash
-pre-commit install --hook-type commit-msg
-```
-
-## 5) Hook behavior
+## 4) Hook behavior
 
 `rip0005-rebase-check`
 
@@ -70,7 +64,7 @@ pre-commit install --hook-type commit-msg
 - Exception: merge commits are allowed.
 - Defaults: protected branches `main master develop`.
 
-## 6) Optional: override parents/remote for `rip0005-rebase-check`
+## 5) Optional: override parents/remote for `rip0005-rebase-check`
 
 `rip0005-rebase-check` supports args: `remote`, `parents`, `target`.
 
