@@ -27,7 +27,7 @@ if [[ ! -f "$merge_head_path" ]]; then
 fi
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-rebase_check_script="$script_dir/rebase-check.sh"
+rebase_check_script="$script_dir/rip0005-rebase-check.sh"
 
 while read -r source_commit; do
   [[ -z "$source_commit" ]] && continue
