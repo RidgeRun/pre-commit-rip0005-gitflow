@@ -1,6 +1,6 @@
 - id: rip0005-rebase-check
   name: RIP 5 - Rebase Check
-  entry: bin/rebase-check.sh
+  entry: bin/rip0005-rebase-check.sh
   language: script
   pass_filenames: false
   always_run: true
@@ -22,7 +22,7 @@
 
 - id: rip0005-rebase-merge-check
   name: RIP 5 - Rebase Merge Check
-  entry: bin/rebase-merge-check.sh
+  entry: bin/rip0005-rebase-merge-check.sh
   language: script
   pass_filenames: false
   always_run: true
