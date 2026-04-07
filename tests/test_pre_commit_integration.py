@@ -11,13 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-HOOK_IDS = (
-    "rip0005-branch-rebased",
-    "rip0005-merge-rebased",
-    "rip0005-protected-branch-commit",
-    "rip0005-protected-branch-merge-only",
-    "rip0005-protected-branch-no-overlap",
-)
+HOOK_IDS = ("rip0005-gitflow",)
 PROTECTED_BRANCHES = ("main", "master", "develop")
 
 

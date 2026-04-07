@@ -1,53 +1,10 @@
-- id: rip0005-branch-rebased
-  name: RIP 5 Branch Rebased
-  entry: bin/rip0005-branch-rebased.sh
-  language: script
-  pass_filenames: false
-  always_run: true
-  stages: [pre-push]
-  description: |
-      Checks that the current branch contains the latest tips of
-      `origin/main`, `origin/master`, and `origin/develop`.
-
-- id: rip0005-merge-rebased
-  name: RIP 5 Merge Rebased
-  entry: bin/rip0005-merge-rebased.sh
-  language: script
-  pass_filenames: false
-  always_run: true
-  stages: [commit-msg]
-  description: |
-      Checks that the merge source is rebased on the current destination branch
-      in `origin`.
-
-- id: rip0005-protected-branch-commit
-  name: RIP 5 Protected Branch Commit
-  entry: bin/rip0005-protected-branch-commit.sh
+- id: rip0005-gitflow
+  name: RIP 5 GitFlow
+  entry: bin/rip0005-gitflow.sh
   language: script
   pass_filenames: true
   always_run: true
-  stages: [commit-msg]
+  stages: [pre-push, commit-msg]
   description: |
-      Blocks direct commits on `main`, `master`, and `develop`.
-
-- id: rip0005-protected-branch-merge-only
-  name: RIP 5 Protected Branch Merge Only
-  entry: bin/rip0005-protected-branch-merge-only.sh
-  language: script
-  pass_filenames: false
-  always_run: true
-  stages: [pre-push]
-  description: |
-      Blocks protected-branch updates whose new mainline commits are not merge
-      commits.
-
-- id: rip0005-protected-branch-no-overlap
-  name: RIP 5 Protected Branch No Overlap
-  entry: bin/rip0005-protected-branch-no-overlap.sh
-  language: script
-  pass_filenames: false
-  always_run: true
-  stages: [pre-push]
-  description: |
-      Blocks protected-branch updates whose new merge commits were created from
-      stale branches.
+      Routes RIP 5 checks to the appropriate scripts for `pre-push` and
+      `commit-msg`.
