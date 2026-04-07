@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-HOOK_ID = "rip0005-gitflow"
+HOOK_IDS = (
+    "rip0005-branch-rebased",
+    "rip0005-merge-rebased",
+    "rip0005-protected-branch-commit",
+    "rip0005-protected-branch-merge-only",
+)
 PROTECTED_BRANCHES = ("main", "master", "develop")
 
 
@@ -149,16 +154,15 @@ class PreCommitIntegrationTests(unittest.TestCase):
             git(work, "add", "README.md")
             git(work, "commit", "-q", "-m", "Initial commit")
 
+            hooks = "\n".join(f"      - id: {hook_id}" for hook_id in HOOK_IDS)
             write_file(
                 work / ".pre-commit-config.yaml",
-                textwrap.dedent(
-                    f"""\
-                    repos:
-                      - repo: {self.hook_repo}
-                        rev: {self.hook_rev}
-                        hooks:
-                          - id: {HOOK_ID}
-                    """
+                (
+                    "repos:\n"
+                    f"  - repo: {self.hook_repo}\n"
+                    f"    rev: {self.hook_rev}\n"
+                    "    hooks:\n"
+                    f"{hooks}\n"
                 ),
             )
             git(work, "add", ".pre-commit-config.yaml")
@@ -302,6 +306,56 @@ class PreCommitIntegrationTests(unittest.TestCase):
 
                     git(scenario.work, "checkout", "-q", branch)
                     git(scenario.work, "merge", "-q", feature_branch)
+
+                    proc = git(
+                        scenario.work,
+                        "push",
+                        "origin",
+                        branch,
+                        env=scenario.hook_env,
+                        check=False,
+                    )
+
+                    self.assert_failed(
+                        proc,
+                        f"non-merge update detected on '{branch}'",
+                        "Use 'git merge --no-ff <source-branch>'",
+                    )
+
+    def test_push_rejects_earlier_non_merge_commit_on_protected_branch(self) -> None:
+        for branch in PROTECTED_BRANCHES:
+            with self.subTest(branch=branch):
+                with self.make_scenario(branch) as scenario:
+                    write_file(
+                        scenario.work / "protected-history.txt",
+                        f"bad direct commit on {branch}\n",
+                    )
+                    git(scenario.work, "add", "protected-history.txt")
+                    git(
+                        scenario.work,
+                        "commit",
+                        "--no-verify",
+                        "-m",
+                        f"Bypassed direct commit on {branch}",
+                    )
+
+                    feature_branch = self.create_feature_commit(
+                        scenario,
+                        branch_name="feature/history-check",
+                        filename="feature-history.txt",
+                        content=f"feature after bad {branch} commit\n",
+                        message=f"Feature after bad {branch} commit",
+                    )
+
+                    git(scenario.work, "checkout", "-q", branch)
+                    git(
+                        scenario.work,
+                        "merge",
+                        "--no-ff",
+                        "--no-edit",
+                        feature_branch,
+                        env=scenario.hook_env,
+                    )
 
                     proc = git(
                         scenario.work,

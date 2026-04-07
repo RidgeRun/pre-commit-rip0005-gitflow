@@ -4,9 +4,12 @@ Use these hooks with `pre-commit` to enforce RIP 5 GitFlow rules.
 
 ## 1) Available hooks
 
-This repository exposes a single hook ID:
+This repository exposes these hook IDs:
 
-- `rip0005-gitflow`
+- `rip0005-branch-rebased`
+- `rip0005-merge-rebased`
+- `rip0005-protected-branch-commit`
+- `rip0005-protected-branch-merge-only`
 
 ## 2) Add to your `.pre-commit-config.yaml`
 
@@ -15,46 +18,47 @@ repos:
   - repo: <hook-repo-url>
     rev: <tag-or-commit>
     hooks:
-      - id: rip0005-gitflow
+      - id: rip0005-branch-rebased
+      - id: rip0005-merge-rebased
+      - id: rip0005-protected-branch-commit
+      - id: rip0005-protected-branch-merge-only
 ```
 
 ## 3) Install hook types
 
 ```bash
-pre-commit install --hook-type pre-push --hook-type commit-msg
+pre-commit install --hook-type pre-push --hook-type pre-merge-commit --hook-type commit-msg
 ```
 
 ## 4) Hook behavior
 
-`rip0005-gitflow` runs different RIP 5 checks depending on the Git hook stage.
+`rip0005-branch-rebased`
 
 - Stage: `pre-push`
-- Checks: ensure the pushed branch already contains the latest tip of the
-  shared branches and block direct commits or fast-forward updates on protected
-  branches.
-- Rule: every new commit on the protected branch first-parent path must be a
-  merge commit.
-- Defaults: remote `origin`, shared/protected branches `main master develop`,
-  target current branch.
+- Checks that the current branch contains the latest tips of `origin/main`,
+  `origin/master`, and `origin/develop`.
+
+`rip0005-merge-rebased`
 
 - Stage: `commit-msg`
-- Checks: block creating a normal commit directly on a protected branch. During
-  merge commits, also ensure the incoming merge source commit or commits were
-  rebased onto the current destination branch.
-- Exception: merge commits are allowed.
-- Behavior: merge validation checks against `origin/<destination-branch>`.
+- Checks that the merge source is rebased on the current destination branch in
+  `origin`.
+
+`rip0005-protected-branch-commit`
+
+- Stage: `commit-msg`
+- Blocks direct commits on `main`, `master`, and `develop`.
+- Merge commits are allowed.
+
+`rip0005-protected-branch-merge-only`
+
+- Stage: `pre-push`
+- Blocks protected-branch updates whose new mainline commits are not merge
+  commits.
 
 ## 5) Optional: override defaults
 
-`rip0005-gitflow` supports optional named arguments:
+These hooks have no arguments.
 
-- `--remote=<name>`
-- `--branches=<space-or-comma-separated-branch-list>`
-- `--target=<commit-ish>` for the `pre-push` rebase check only
-
-Example:
-
-```yaml
-- id: rip0005-gitflow
-  args: [--remote=upstream, "--branches=main develop"]
-```
+It always checks against `origin` and treats `main`, `master`, and `develop`
+as the protected/shared branches.

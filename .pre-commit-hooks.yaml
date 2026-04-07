@@ -1,13 +1,42 @@
-- id: rip0005-gitflow
-  name: RIP 5 GitFlow
-  entry: bin/rip0005-gitflow.sh
+- id: rip0005-branch-rebased
+  name: RIP 5 Branch Rebased
+  entry: bin/rip0005-branch-rebased.sh
+  language: script
+  pass_filenames: false
+  always_run: true
+  stages: [pre-push]
+  description: |
+      Checks that the current branch contains the latest tips of
+      `origin/main`, `origin/master`, and `origin/develop`.
+
+- id: rip0005-merge-rebased
+  name: RIP 5 Merge Rebased
+  entry: bin/rip0005-merge-rebased.sh
+  language: script
+  pass_filenames: false
+  always_run: true
+  stages: [commit-msg]
+  description: |
+      Checks that the merge source is rebased on the current destination branch
+      in `origin`.
+
+- id: rip0005-protected-branch-commit
+  name: RIP 5 Protected Branch Commit
+  entry: bin/rip0005-protected-branch-commit.sh
   language: script
   pass_filenames: true
   always_run: true
-  stages: [pre-push, commit-msg]
+  stages: [commit-msg]
   description: |
-      Runs the RIP 5 GitFlow checks as a single hook. On `pre-push` it validates
-      that the current branch is rebased on the shared branches and blocks
-      fast-forward/direct updates on protected branches. On `commit-msg` it
-      blocks direct commits on protected branches and validates merge commits
-      against the destination branch.
+      Blocks direct commits on `main`, `master`, and `develop`.
+
+- id: rip0005-protected-branch-merge-only
+  name: RIP 5 Protected Branch Merge Only
+  entry: bin/rip0005-protected-branch-merge-only.sh
+  language: script
+  pass_filenames: false
+  always_run: true
+  stages: [pre-push]
+  description: |
+      Blocks protected-branch updates whose new mainline commits are not merge
+      commits.
