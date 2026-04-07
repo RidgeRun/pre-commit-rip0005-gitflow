@@ -12,7 +12,9 @@
 
 set -euo pipefail
 
-log(){ printf "%s\n" "$*" >&2; }
+readonly REMOTE_NAME="origin"
+
+log() { printf "%s\n" "$*" >&2; }
 
 destination_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
 if [[ -z "$destination_branch" ]]; then
@@ -26,12 +28,27 @@ if [[ ! -f "$merge_head_path" ]]; then
   exit 0
 fi
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-rebase_check_script="$script_dir/rip0005-rebase-check.sh"
+if ! git ls-remote --exit-code --heads "$REMOTE_NAME" "$destination_branch" >/dev/null 2>&1; then
+  log "Rebase-check: parent '$REMOTE_NAME/$destination_branch' does not exist. Skipping."
+  exit 0
+fi
+
+if ! git fetch -q "$REMOTE_NAME" "$destination_branch"; then
+  log "Rebase-check: failed to fetch '$REMOTE_NAME/$destination_branch'."
+  exit 1
+fi
+
+parent_ref="refs/remotes/$REMOTE_NAME/$destination_branch"
+parent_sha="$(git rev-parse "$parent_ref")"
 
 while read -r source_commit; do
   [[ -z "$source_commit" ]] && continue
-  if ! "$rebase_check_script" origin "$destination_branch" "$source_commit"; then
+
+  if ! git merge-base --is-ancestor "$parent_sha" "$source_commit"; then
+    log "Rebase-check failed: '$source_commit' is behind '$REMOTE_NAME/$destination_branch'."
+    log "Rebase onto '$REMOTE_NAME/$destination_branch' before continuing."
+    log "Parent tip: $parent_sha"
+    log "Target head: $source_commit"
     exit 1
   fi
 done < "$merge_head_path"
