@@ -59,7 +59,7 @@ check_no_ff_update() {
 }
 
 main() {
-  local protected_spec="${3:-main master develop}"
+  local protected_spec="${1:-main master develop}"
   local from_ref="${PRE_COMMIT_FROM_REF:-}"
   local to_ref="${PRE_COMMIT_TO_REF:-}"
   local remote_branch_ref="${PRE_COMMIT_REMOTE_BRANCH:-}"
