@@ -40,3 +40,14 @@
   description: |
       Blocks protected-branch updates whose new mainline commits are not merge
       commits.
+
+- id: rip0005-protected-branch-no-overlap
+  name: RIP 5 Protected Branch No Overlap
+  entry: bin/rip0005-protected-branch-no-overlap.sh
+  language: script
+  pass_filenames: false
+  always_run: true
+  stages: [pre-push]
+  description: |
+      Blocks protected-branch updates whose new merge commits were created from
+      stale branches.

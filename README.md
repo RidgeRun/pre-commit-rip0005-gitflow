@@ -10,6 +10,7 @@ This repository exposes these hook IDs:
 - `rip0005-merge-rebased`
 - `rip0005-protected-branch-commit`
 - `rip0005-protected-branch-merge-only`
+- `rip0005-protected-branch-no-overlap`
 
 ## 2) Add to your `.pre-commit-config.yaml`
 
@@ -22,6 +23,7 @@ repos:
       - id: rip0005-merge-rebased
       - id: rip0005-protected-branch-commit
       - id: rip0005-protected-branch-merge-only
+      - id: rip0005-protected-branch-no-overlap
 ```
 
 ## 3) Install hook types
@@ -55,6 +57,12 @@ pre-commit install --hook-type pre-push --hook-type pre-merge-commit --hook-type
 - Stage: `pre-push`
 - Blocks protected-branch updates whose new mainline commits are not merge
   commits.
+
+`rip0005-protected-branch-no-overlap`
+
+- Stage: `pre-push`
+- Blocks protected-branch updates whose new merge commits were created from
+  stale branches.
 
 ## 5) Optional: override defaults
 

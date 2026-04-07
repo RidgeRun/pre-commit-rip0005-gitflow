@@ -16,6 +16,7 @@ HOOK_IDS = (
     "rip0005-merge-rebased",
     "rip0005-protected-branch-commit",
     "rip0005-protected-branch-merge-only",
+    "rip0005-protected-branch-no-overlap",
 )
 PROTECTED_BRANCHES = ("main", "master", "develop")
 
@@ -370,6 +371,50 @@ class PreCommitIntegrationTests(unittest.TestCase):
                         proc,
                         f"non-merge update detected on '{branch}'",
                         "Use 'git merge --no-ff <source-branch>'",
+                    )
+
+    def test_push_rejects_overlapping_merge_on_protected_branch(self) -> None:
+        for branch in PROTECTED_BRANCHES:
+            with self.subTest(branch=branch):
+                with self.make_scenario(branch) as scenario:
+                    feature_branch = self.create_feature_commit(
+                        scenario,
+                        branch_name="feature/stale-merge",
+                        filename="stale-feature.txt",
+                        content=f"stale feature for {branch}\n",
+                        message=f"Stale feature for {branch}",
+                    )
+                    self.advance_base_branch_in_peer(
+                        scenario,
+                        filename=f"{branch}-advanced.txt",
+                        content=f"base advanced for {branch}\n",
+                        message=f"Advance {branch} before stale merge",
+                    )
+
+                    git(scenario.work, "checkout", "-q", branch)
+                    git(scenario.work, "pull", "-q", "--ff-only", "origin", branch)
+                    git(
+                        scenario.work,
+                        "merge",
+                        "--no-ff",
+                        "--no-edit",
+                        "--no-verify",
+                        feature_branch,
+                    )
+
+                    proc = git(
+                        scenario.work,
+                        "push",
+                        "origin",
+                        branch,
+                        env=scenario.hook_env,
+                        check=False,
+                    )
+
+                    self.assert_failed(
+                        proc,
+                        f"overlapping merge detected on '{branch}'",
+                        f"not rebased on '{branch}'",
                     )
 
     def test_feature_branch_push_is_rejected_when_origin_base_advances(self) -> None:
