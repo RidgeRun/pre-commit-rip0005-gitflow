@@ -17,24 +17,20 @@ readonly BASE_BRANCHES=(main master develop)
 
 log() { printf "%s\n" "$*" >&2; }
 
-current_branch() {
-  git symbolic-ref --quiet --short HEAD 2>/dev/null || true
-}
-
 remote_branch_exists() {
   git ls-remote --exit-code --heads "$REMOTE_NAME" "$1" >/dev/null 2>&1
 }
 
-branch="$(current_branch)"
-if [[ -z "$branch" ]]; then
-  log "Rebase-check: detached HEAD. Skipping."
-  exit 0
-fi
+check_rebased() {
+  local target_commit="$1"
+  local base_branch="$2"
+  local target_label="$3"
+  local parent_ref="refs/remotes/$REMOTE_NAME/$base_branch"
+  local parent_sha
 
-for base_branch in "${BASE_BRANCHES[@]}"; do
   if ! remote_branch_exists "$base_branch"; then
     log "Rebase-check: parent '$REMOTE_NAME/$base_branch' does not exist. Skipping."
-    continue
+    return 0
   fi
 
   if ! git fetch -q "$REMOTE_NAME" "$base_branch"; then
@@ -42,17 +38,30 @@ for base_branch in "${BASE_BRANCHES[@]}"; do
     exit 1
   fi
 
-  parent_ref="refs/remotes/$REMOTE_NAME/$base_branch"
   parent_sha="$(git rev-parse "$parent_ref")"
-  target_sha="$(git rev-parse HEAD)"
 
-  if ! git merge-base --is-ancestor "$parent_sha" "$target_sha"; then
-    log "Rebase-check failed: '$branch' is behind '$REMOTE_NAME/$base_branch'."
+  if ! git merge-base --is-ancestor "$parent_sha" "$target_commit"; then
+    log "Rebase-check failed: '$target_label' is behind '$REMOTE_NAME/$base_branch'."
     log "Rebase onto '$REMOTE_NAME/$base_branch' before continuing."
     log "Parent tip: $parent_sha"
-    log "Target head: $target_sha"
+    log "Target head: $target_commit"
     exit 1
   fi
+}
+
+if [[ "$#" -gt 0 ]]; then
+  check_rebased "$1" "$2" "$3"
+  exit 0
+fi
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [[ -z "$branch" ]]; then
+  log "Rebase-check: detached HEAD. Skipping."
+  exit 0
+fi
+
+for base_branch in "${BASE_BRANCHES[@]}"; do
+  check_rebased HEAD "$base_branch" "$branch"
 done
 
 log "Rebase-check passed: '$branch' is up to date."
