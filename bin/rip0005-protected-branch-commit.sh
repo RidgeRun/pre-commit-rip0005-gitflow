@@ -12,9 +12,9 @@
 
 set -euo pipefail
 
-readonly PROTECTED_BRANCHES=(main master develop)
-
 log() { printf "%s\n" "$*" >&2; }
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
 if [[ -z "$current_branch" ]]; then
@@ -22,20 +22,11 @@ if [[ -z "$current_branch" ]]; then
   exit 0
 fi
 
-is_protected=false
-for branch in "${PROTECTED_BRANCHES[@]}"; do
-  if [[ "$current_branch" == "$branch" ]]; then
-    is_protected=true
-    break
-  fi
-done
-
-if [[ "$is_protected" != true ]]; then
+if [[ -f "$(git rev-parse --git-path MERGE_HEAD)" ]]; then
   exit 0
 fi
 
-if [[ -f "$(git rev-parse --git-path MERGE_HEAD)" ]]; then
-  log "RIP 5 check: merge commit on '$current_branch'. Allowed."
+if "$script_dir/rip0005-protected-branch-merge-only.sh" HEAD "$current_branch"; then
   exit 0
 fi
 
