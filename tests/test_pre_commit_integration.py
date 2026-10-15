@@ -467,6 +467,118 @@ class PreCommitIntegrationTests(unittest.TestCase):
                 "Rebase onto 'origin/develop' before continuing.",
             )
 
+    @contextlib.contextmanager
+    def make_release_merged_scenario(self):
+        with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+            git(scenario.work, "push", "-q", "-u", "origin", "develop")
+
+            for commit_number in range(2):
+                development_branch = f"feature/develop-change-{commit_number}"
+                self.create_feature_commit(
+                    scenario,
+                    branch_name=development_branch,
+                    filename=f"develop-change-{commit_number}.txt",
+                    content=f"develop change {commit_number}\n",
+                    message=f"Develop change {commit_number}",
+                )
+                git(scenario.work, "checkout", "-q", "develop")
+                merge_proc = git(
+                    scenario.work,
+                    "merge",
+                    "--no-ff",
+                    "--no-edit",
+                    development_branch,
+                    env=scenario.hook_env,
+                    check=False,
+                )
+                self.assertEqual(merge_proc.returncode, 0, _result_message(merge_proc))
+                git(scenario.work, "push", "-q", "origin", "develop", env=scenario.hook_env)
+
+            release_branch = "release/test-release"
+            git(scenario.work, "checkout", "-q", "-b", release_branch)
+            write_file(scenario.work / "release.txt", "release change\n")
+            git(scenario.work, "add", "release.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Prepare test release",
+                env=scenario.hook_env,
+            )
+
+            git(scenario.work, "checkout", "-q", "main")
+            main_merge = git(
+                scenario.work,
+                "merge",
+                "--no-ff",
+                "--no-edit",
+                release_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(main_merge.returncode, 0, _result_message(main_merge))
+            git(scenario.work, "push", "-q", "origin", "main", env=scenario.hook_env)
+
+            git(scenario.work, "checkout", "-q", "develop")
+            develop_merge = git(
+                scenario.work,
+                "merge",
+                "--no-ff",
+                "--no-edit",
+                release_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(develop_merge.returncode, 0, _result_message(develop_merge))
+            git(scenario.work, "push", "-q", "origin", "develop", env=scenario.hook_env)
+
+            yield scenario
+
+    def test_feature_from_develop_push_succeeds_after_release_is_merged(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            feature_branch = self.create_feature_commit(
+                scenario,
+                branch_name="feature/after-release",
+                filename="after-release.txt",
+                content="feature based on develop after release\n",
+                message="Feature after release",
+            )
+            feature_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                feature_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(feature_push.returncode, 0, _result_message(feature_push))
+
+    def test_hotfix_from_main_push_succeeds_after_release_is_merged(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "hotfix/test", "main")
+            write_file(scenario.work / "hotfix.txt", "hotfix change\n")
+            git(scenario.work, "add", "hotfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Apply test hotfix",
+                env=scenario.hook_env,
+            )
+
+            hotfix_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "hotfix/test",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(hotfix_push.returncode, 0, _result_message(hotfix_push))
+
     def test_no_ff_merge_can_be_pushed_when_branch_is_rebased(self) -> None:
         with self.make_scenario("main") as scenario:
             feature_branch = self.create_feature_commit(
