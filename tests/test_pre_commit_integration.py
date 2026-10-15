@@ -579,6 +579,30 @@ class PreCommitIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(hotfix_push.returncode, 0, _result_message(hotfix_push))
 
+    def test_release_branch_push_succeeds_when_based_on_develop(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "release/post-release")
+            write_file(scenario.work / "next-release.txt", "next release change\n")
+            git(scenario.work, "add", "next-release.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Add next release change",
+                env=scenario.hook_env,
+            )
+
+            release_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "release/post-release",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(release_push.returncode, 0, _result_message(release_push))
+
     def test_no_ff_merge_can_be_pushed_when_branch_is_rebased(self) -> None:
         with self.make_scenario("main") as scenario:
             feature_branch = self.create_feature_commit(
