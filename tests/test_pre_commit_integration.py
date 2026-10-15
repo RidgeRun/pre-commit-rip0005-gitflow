@@ -723,6 +723,58 @@ class PreCommitIntegrationTests(unittest.TestCase):
                 "Create one of these branches before pushing 'hotfix/no-main'.",
             )
 
+    def test_unsupported_topic_branch_prefix_is_rejected(self) -> None:
+        with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "bugfix/unsupported")
+            write_file(scenario.work / "bugfix.txt", "unsupported branch prefix\n")
+            git(scenario.work, "add", "bugfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Commit on unsupported branch",
+                env=scenario.hook_env,
+            )
+
+            branch_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "bugfix/unsupported",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                branch_push,
+                "unsupported branch 'bugfix/unsupported'",
+                "Use 'feature/<name>', 'release/<name>', or 'hotfix/<name>'.",
+            )
+
+    def test_hotfix_push_uses_master_when_main_is_missing(self) -> None:
+        with self.make_scenario("master") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "hotfix/master-fallback")
+            write_file(scenario.work / "hotfix.txt", "hotfix based on master\n")
+            git(scenario.work, "add", "hotfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Hotfix based on master",
+                env=scenario.hook_env,
+            )
+
+            hotfix_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "hotfix/master-fallback",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(hotfix_push.returncode, 0, _result_message(hotfix_push))
+
     def test_no_ff_merge_can_be_pushed_when_branch_is_rebased(self) -> None:
         with self.make_scenario("main") as scenario:
             feature_branch = self.create_feature_commit(
