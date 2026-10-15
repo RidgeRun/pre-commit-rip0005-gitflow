@@ -670,6 +670,59 @@ class PreCommitIntegrationTests(unittest.TestCase):
                 "Rebase onto 'origin/main' before continuing.",
             )
 
+    def test_feature_push_fails_when_develop_is_missing(self) -> None:
+        with self.make_scenario("main") as scenario:
+            feature_branch = self.create_feature_commit(
+                scenario,
+                branch_name="feature/no-develop",
+                filename="feature.txt",
+                content="feature without develop\n",
+                message="Feature without develop",
+            )
+
+            feature_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                feature_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                feature_push,
+                "required base 'origin/develop' does not exist",
+                "Create 'origin/develop' before pushing 'feature/no-develop'.",
+            )
+
+    def test_hotfix_push_fails_when_main_and_master_are_missing(self) -> None:
+        with self.make_scenario("develop") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "hotfix/no-main")
+            write_file(scenario.work / "hotfix.txt", "hotfix without main\n")
+            git(scenario.work, "add", "hotfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Hotfix without main",
+                env=scenario.hook_env,
+            )
+
+            hotfix_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "hotfix/no-main",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                hotfix_push,
+                "required base 'origin/main' or 'origin/master' does not exist",
+                "Create one of these branches before pushing 'hotfix/no-main'.",
+            )
+
     def test_no_ff_merge_can_be_pushed_when_branch_is_rebased(self) -> None:
         with self.make_scenario("main") as scenario:
             feature_branch = self.create_feature_commit(
