@@ -184,11 +184,16 @@ class PreCommitIntegrationTests(unittest.TestCase):
                 pre_commit_home=pre_commit_home,
             )
 
-    def clone_peer(self, scenario: Scenario, name: str = "peer") -> Path:
+    def clone_peer(
+        self,
+        scenario: Scenario,
+        name: str = "peer",
+        branch: str | None = None,
+    ) -> Path:
         peer = scenario.scratch / name
         git(scenario.scratch, "clone", "-q", str(scenario.origin), str(peer))
         configure_user(peer)
-        git(peer, "checkout", "-q", scenario.base_branch)
+        git(peer, "checkout", "-q", branch or scenario.base_branch)
         return peer
 
     def create_feature_commit(
@@ -219,12 +224,14 @@ class PreCommitIntegrationTests(unittest.TestCase):
         filename: str = "base.txt",
         content: str = "base branch change\n",
         message: str = "Advance base",
+        branch: str | None = None,
     ) -> Path:
-        peer = self.clone_peer(scenario)
+        base_branch = branch or scenario.base_branch
+        peer = self.clone_peer(scenario, branch=base_branch)
         write_file(peer / filename, content)
         git(peer, "add", filename)
         git(peer, "commit", "-q", "-m", message)
-        git(peer, "push", "-q", "origin", scenario.base_branch)
+        git(peer, "push", "-q", "origin", base_branch)
         return peer
 
     def assert_failed(self, proc: subprocess.CompletedProcess[str], *snippets: str) -> None:
@@ -413,6 +420,8 @@ class PreCommitIntegrationTests(unittest.TestCase):
 
     def test_feature_branch_push_is_rejected_when_origin_base_advances(self) -> None:
         with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+            git(scenario.work, "push", "-q", "-u", "origin", "develop")
             feature_branch = self.create_feature_commit(
                 scenario,
                 content="feature branch not rebased\n",
@@ -420,9 +429,10 @@ class PreCommitIntegrationTests(unittest.TestCase):
             )
             self.advance_base_branch_in_peer(
                 scenario,
-                filename="main-base.txt",
-                content="origin main advanced\n",
-                message="Advance main in peer",
+                filename="develop-base.txt",
+                content="origin develop advanced\n",
+                message="Advance develop in peer",
+                branch="develop",
             )
 
             proc = git(
@@ -437,8 +447,8 @@ class PreCommitIntegrationTests(unittest.TestCase):
 
             self.assert_failed(
                 proc,
-                "is behind 'origin/main'",
-                "Rebase onto 'origin/main' before continuing.",
+                "is behind 'origin/develop'",
+                "Rebase onto 'origin/develop' before continuing.",
             )
 
     def test_no_ff_merge_can_be_pushed_when_branch_is_rebased(self) -> None:
@@ -471,6 +481,8 @@ class PreCommitIntegrationTests(unittest.TestCase):
 
     def test_feature_branch_push_succeeds_after_rebasing_onto_origin_base(self) -> None:
         with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+            git(scenario.work, "push", "-q", "-u", "origin", "develop")
             feature_branch = self.create_feature_commit(
                 scenario,
                 content="feature branch before rebase\n",
@@ -478,13 +490,14 @@ class PreCommitIntegrationTests(unittest.TestCase):
             )
             self.advance_base_branch_in_peer(
                 scenario,
-                filename="origin-main.txt",
+                filename="origin-develop.txt",
                 content="origin advanced before feature push\n",
-                message="Advance main before feature push",
+                message="Advance develop before feature push",
+                branch="develop",
             )
 
             git(scenario.work, "fetch", "-q", "origin")
-            git(scenario.work, "rebase", "origin/main")
+            git(scenario.work, "rebase", "origin/develop")
 
             push_proc = git(
                 scenario.work,
