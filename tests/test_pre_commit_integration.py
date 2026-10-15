@@ -261,6 +261,22 @@ class PreCommitIntegrationTests(unittest.TestCase):
                         f"direct commits to '{branch}' are not allowed",
                     )
 
+    def test_new_develop_branch_can_be_pushed_when_only_main_exists(self) -> None:
+        with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+
+            proc = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "develop",
+                env=scenario.hook_env,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, _result_message(proc))
+
     def test_stale_branches_cannot_be_merged_into_protected_branches(self) -> None:
         for branch in PROTECTED_BRANCHES:
             with self.subTest(branch=branch):
