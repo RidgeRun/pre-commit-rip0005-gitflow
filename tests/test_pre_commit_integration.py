@@ -184,11 +184,16 @@ class PreCommitIntegrationTests(unittest.TestCase):
                 pre_commit_home=pre_commit_home,
             )
 
-    def clone_peer(self, scenario: Scenario, name: str = "peer") -> Path:
+    def clone_peer(
+        self,
+        scenario: Scenario,
+        name: str = "peer",
+        branch: str | None = None,
+    ) -> Path:
         peer = scenario.scratch / name
         git(scenario.scratch, "clone", "-q", str(scenario.origin), str(peer))
         configure_user(peer)
-        git(peer, "checkout", "-q", scenario.base_branch)
+        git(peer, "checkout", "-q", branch or scenario.base_branch)
         return peer
 
     def create_feature_commit(
@@ -219,12 +224,14 @@ class PreCommitIntegrationTests(unittest.TestCase):
         filename: str = "base.txt",
         content: str = "base branch change\n",
         message: str = "Advance base",
+        branch: str | None = None,
     ) -> Path:
-        peer = self.clone_peer(scenario)
+        base_branch = branch or scenario.base_branch
+        peer = self.clone_peer(scenario, branch=base_branch)
         write_file(peer / filename, content)
         git(peer, "add", filename)
         git(peer, "commit", "-q", "-m", message)
-        git(peer, "push", "-q", "origin", scenario.base_branch)
+        git(peer, "push", "-q", "origin", base_branch)
         return peer
 
     def assert_failed(self, proc: subprocess.CompletedProcess[str], *snippets: str) -> None:
@@ -253,6 +260,22 @@ class PreCommitIntegrationTests(unittest.TestCase):
                         proc,
                         f"direct commits to '{branch}' are not allowed",
                     )
+
+    def test_new_develop_branch_can_be_pushed_when_only_main_exists(self) -> None:
+        with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+
+            proc = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "develop",
+                env=scenario.hook_env,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, _result_message(proc))
 
     def test_stale_branches_cannot_be_merged_into_protected_branches(self) -> None:
         for branch in PROTECTED_BRANCHES:
@@ -413,6 +436,8 @@ class PreCommitIntegrationTests(unittest.TestCase):
 
     def test_feature_branch_push_is_rejected_when_origin_base_advances(self) -> None:
         with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+            git(scenario.work, "push", "-q", "-u", "origin", "develop")
             feature_branch = self.create_feature_commit(
                 scenario,
                 content="feature branch not rebased\n",
@@ -420,9 +445,10 @@ class PreCommitIntegrationTests(unittest.TestCase):
             )
             self.advance_base_branch_in_peer(
                 scenario,
-                filename="main-base.txt",
-                content="origin main advanced\n",
-                message="Advance main in peer",
+                filename="develop-base.txt",
+                content="origin develop advanced\n",
+                message="Advance develop in peer",
+                branch="develop",
             )
 
             proc = git(
@@ -437,9 +463,317 @@ class PreCommitIntegrationTests(unittest.TestCase):
 
             self.assert_failed(
                 proc,
+                "is behind 'origin/develop'",
+                "Rebase onto 'origin/develop' before continuing.",
+            )
+
+    @contextlib.contextmanager
+    def make_release_merged_scenario(self):
+        with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+            git(scenario.work, "push", "-q", "-u", "origin", "develop")
+
+            for commit_number in range(2):
+                development_branch = f"feature/develop-change-{commit_number}"
+                self.create_feature_commit(
+                    scenario,
+                    branch_name=development_branch,
+                    filename=f"develop-change-{commit_number}.txt",
+                    content=f"develop change {commit_number}\n",
+                    message=f"Develop change {commit_number}",
+                )
+                git(scenario.work, "checkout", "-q", "develop")
+                merge_proc = git(
+                    scenario.work,
+                    "merge",
+                    "--no-ff",
+                    "--no-edit",
+                    development_branch,
+                    env=scenario.hook_env,
+                    check=False,
+                )
+                self.assertEqual(merge_proc.returncode, 0, _result_message(merge_proc))
+                git(scenario.work, "push", "-q", "origin", "develop", env=scenario.hook_env)
+
+            release_branch = "release/test-release"
+            git(scenario.work, "checkout", "-q", "-b", release_branch)
+            write_file(scenario.work / "release.txt", "release change\n")
+            git(scenario.work, "add", "release.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Prepare test release",
+                env=scenario.hook_env,
+            )
+
+            git(scenario.work, "checkout", "-q", "main")
+            main_merge = git(
+                scenario.work,
+                "merge",
+                "--no-ff",
+                "--no-edit",
+                release_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(main_merge.returncode, 0, _result_message(main_merge))
+            git(scenario.work, "push", "-q", "origin", "main", env=scenario.hook_env)
+
+            git(scenario.work, "checkout", "-q", "develop")
+            develop_merge = git(
+                scenario.work,
+                "merge",
+                "--no-ff",
+                "--no-edit",
+                release_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(develop_merge.returncode, 0, _result_message(develop_merge))
+            git(scenario.work, "push", "-q", "origin", "develop", env=scenario.hook_env)
+
+            yield scenario
+
+    def test_feature_from_develop_push_succeeds_after_release_is_merged(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            feature_branch = self.create_feature_commit(
+                scenario,
+                branch_name="feature/after-release",
+                filename="after-release.txt",
+                content="feature based on develop after release\n",
+                message="Feature after release",
+            )
+            feature_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                feature_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(feature_push.returncode, 0, _result_message(feature_push))
+
+    def test_hotfix_from_main_push_succeeds_after_release_is_merged(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "hotfix/test", "main")
+            write_file(scenario.work / "hotfix.txt", "hotfix change\n")
+            git(scenario.work, "add", "hotfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Apply test hotfix",
+                env=scenario.hook_env,
+            )
+
+            hotfix_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "hotfix/test",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(hotfix_push.returncode, 0, _result_message(hotfix_push))
+
+    def test_release_branch_push_succeeds_when_based_on_develop(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "release/post-release")
+            write_file(scenario.work / "next-release.txt", "next release change\n")
+            git(scenario.work, "add", "next-release.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Add next release change",
+                env=scenario.hook_env,
+            )
+
+            release_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "release/post-release",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(release_push.returncode, 0, _result_message(release_push))
+
+    def test_stale_feature_branch_push_is_rejected_when_develop_advances(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            feature_branch = self.create_feature_commit(
+                scenario,
+                branch_name="feature/stale-after-release",
+                filename="stale-feature.txt",
+                content="stale feature change\n",
+                message="Stale feature change",
+            )
+            self.advance_base_branch_in_peer(
+                scenario,
+                filename="new-develop-change.txt",
+                content="new develop commit\n",
+                message="Advance develop after feature branch",
+                branch="develop",
+            )
+
+            feature_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                feature_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                feature_push,
+                "is behind 'origin/develop'",
+                "Rebase onto 'origin/develop' before continuing.",
+            )
+
+    def test_stale_hotfix_push_is_rejected_when_main_advances(self) -> None:
+        with self.make_release_merged_scenario() as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "hotfix/stale-after-release", "main")
+            write_file(scenario.work / "stale-hotfix.txt", "stale hotfix change\n")
+            git(scenario.work, "add", "stale-hotfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Stale hotfix change",
+                env=scenario.hook_env,
+            )
+            self.advance_base_branch_in_peer(
+                scenario,
+                filename="new-main-change.txt",
+                content="new main commit\n",
+                message="Advance main after hotfix branch",
+                branch="main",
+            )
+
+            hotfix_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "hotfix/stale-after-release",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                hotfix_push,
                 "is behind 'origin/main'",
                 "Rebase onto 'origin/main' before continuing.",
             )
+
+    def test_feature_push_fails_when_develop_is_missing(self) -> None:
+        with self.make_scenario("main") as scenario:
+            feature_branch = self.create_feature_commit(
+                scenario,
+                branch_name="feature/no-develop",
+                filename="feature.txt",
+                content="feature without develop\n",
+                message="Feature without develop",
+            )
+
+            feature_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                feature_branch,
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                feature_push,
+                "required base 'origin/develop' does not exist",
+                "Create 'origin/develop' before pushing 'feature/no-develop'.",
+            )
+
+    def test_hotfix_push_fails_when_main_and_master_are_missing(self) -> None:
+        with self.make_scenario("develop") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "hotfix/no-main")
+            write_file(scenario.work / "hotfix.txt", "hotfix without main\n")
+            git(scenario.work, "add", "hotfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Hotfix without main",
+                env=scenario.hook_env,
+            )
+
+            hotfix_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "hotfix/no-main",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                hotfix_push,
+                "required base 'origin/main' or 'origin/master' does not exist",
+                "Create one of these branches before pushing 'hotfix/no-main'.",
+            )
+
+    def test_unsupported_topic_branch_prefix_is_rejected(self) -> None:
+        with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "bugfix/unsupported")
+            write_file(scenario.work / "bugfix.txt", "unsupported branch prefix\n")
+            git(scenario.work, "add", "bugfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Commit on unsupported branch",
+                env=scenario.hook_env,
+            )
+
+            branch_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "bugfix/unsupported",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assert_failed(
+                branch_push,
+                "unsupported branch 'bugfix/unsupported'",
+                "Use 'feature/<name>', 'release/<name>', or 'hotfix/<name>'.",
+            )
+
+    def test_hotfix_push_uses_master_when_main_is_missing(self) -> None:
+        with self.make_scenario("master") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "hotfix/master-fallback")
+            write_file(scenario.work / "hotfix.txt", "hotfix based on master\n")
+            git(scenario.work, "add", "hotfix.txt")
+            git(
+                scenario.work,
+                "commit",
+                "-m",
+                "Hotfix based on master",
+                env=scenario.hook_env,
+            )
+
+            hotfix_push = git(
+                scenario.work,
+                "push",
+                "-u",
+                "origin",
+                "hotfix/master-fallback",
+                env=scenario.hook_env,
+                check=False,
+            )
+            self.assertEqual(hotfix_push.returncode, 0, _result_message(hotfix_push))
 
     def test_no_ff_merge_can_be_pushed_when_branch_is_rebased(self) -> None:
         with self.make_scenario("main") as scenario:
@@ -471,6 +805,8 @@ class PreCommitIntegrationTests(unittest.TestCase):
 
     def test_feature_branch_push_succeeds_after_rebasing_onto_origin_base(self) -> None:
         with self.make_scenario("main") as scenario:
+            git(scenario.work, "checkout", "-q", "-b", "develop")
+            git(scenario.work, "push", "-q", "-u", "origin", "develop")
             feature_branch = self.create_feature_commit(
                 scenario,
                 content="feature branch before rebase\n",
@@ -478,13 +814,14 @@ class PreCommitIntegrationTests(unittest.TestCase):
             )
             self.advance_base_branch_in_peer(
                 scenario,
-                filename="origin-main.txt",
+                filename="origin-develop.txt",
                 content="origin advanced before feature push\n",
-                message="Advance main before feature push",
+                message="Advance develop before feature push",
+                branch="develop",
             )
 
             git(scenario.work, "fetch", "-q", "origin")
-            git(scenario.work, "rebase", "origin/main")
+            git(scenario.work, "rebase", "origin/develop")
 
             push_proc = git(
                 scenario.work,
